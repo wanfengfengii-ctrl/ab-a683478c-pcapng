@@ -1,0 +1,39 @@
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: pcapng-audit:runtime
+    environment:
+      PORT: "8080"
+      HOST: "0.0.0.0"
+    ports:
+      # Host-side port is configurable: set HOST_PORT in .env or the shell.
+      - "${HOST_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).status == 200 else 1)"
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+    restart: unless-stopped
+
+  # One-shot verification: tests + build + mixed-endian API smoke against the
+  # healthy web service. Container exit code is the verification result.
+  verify:
+    build:
+      context: .
+      target: test
+    image: pcapng-audit:test
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      BASE_URL: "http://web:8080"
+      AUDIT_QUIET: "1"
+    command: ["sh", "scripts/verify.sh"]
+    restart: "no"
